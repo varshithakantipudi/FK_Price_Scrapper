@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>E-com Price Scraper Dashboard</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background-color: #f5f7fa; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    .container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 450px; text-align: center; }
+    h3 { color: #2874f0; margin-top: 0; font-size: 24px; }
+    p { color: #666; font-size: 14px; margin-bottom: 20px; }
+    input { margin-bottom: 20px; font-size: 13px; width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    button { width: 100%; padding: 12px; background-color: #fb641b; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; }
+    button:hover { background-color: #f4511e; }
+    #status { margin-top: 20px; font-size: 15px; font-weight: bold; color: #2874f0; background: #e8f0fe; padding: 10px; border-radius: 4px; word-break: break-word; }
+    .last-run { margin-top: 25px; font-size: 12px; color: #888; font-weight: 500; border-top: 1px solid #eee; padding-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h3>Price Scraper Bot</h3>
+    <p>Connected Apps Script Web App URL.</p>
+    <input type="text" id="scriptUrlInput" placeholder="Paste URL here once..." />
+    <button id="startBtn">SYNC & START SCRAPING</button>
+    <div id="status">Ready</div>
+    
+    <div class="last-run" id="lastRunText">Last Run: Never</div>
+  </div>
+  <script src="dashboard.js"></script>
+</body>
+</html>

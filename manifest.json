@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "E-com Price Scraper",
+  "version": "3.0",
+  "description": "Automated daily scraper syncing with Google Sheets.",
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://www.flipkart.com/*",
+    "https://www.amazon.in/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {}
+}
