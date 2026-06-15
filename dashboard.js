@@ -1,3 +1,4 @@
+// Make sure this matches the password string inside your code.gs exactly
 const SECRET_TOKEN = "MySuperSecretPassword123";
 
 document.addEventListener('DOMContentLoaded', async function () {
@@ -6,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const status = document.getElementById('status');
     const lastRunText = document.getElementById('lastRunText');
 
-    // --- NEW: Load saved data from Chrome Memory ---
+    // --- Load saved data from Chrome Memory ---
     const storedData = await chrome.storage.local.get(['savedUrl', 'lastRunTime']);
     if (storedData.savedUrl) {
         scriptUrlInput.value = storedData.savedUrl;
@@ -15,12 +16,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         lastRunText.innerText = `Last Run: ${storedData.lastRunTime}`;
     }
 
-    // --- NEW: Auto-start feature for morning alarms ---
+    // --- Auto-start feature for morning alarms ---
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('auto') === 'true') {
         if (scriptUrlInput.value.trim() !== "") {
             status.innerText = "Morning Alarm Triggered! Starting auto-scrape...";
-            setTimeout(() => startBtn.click(), 1500); // 1.5s delay then auto-click
+            setTimeout(() => startBtn.click(), 1500);
         } else {
             status.innerText = "Auto-run failed: No saved URL found.";
         }
@@ -34,7 +35,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
-        // --- NEW: Save the URL to Chrome Memory ---
+        // --- Save the URL to Chrome Memory ---
         chrome.storage.local.set({ savedUrl: webAppUrl });
 
         const tabsToProcess = ['FSN', 'ASIN'];
@@ -45,6 +46,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             status.innerText = `Fetching ${tab} queue...`;
 
             try {
+                // 1. Fetch from Google Sheets
                 const response = await fetch(webAppUrl, {
                     method: "POST",
                     mode: "cors",
@@ -65,6 +67,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
                 const updates = [];
 
+                // 2. Loop and Scrape
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
                     const id = tab === 'FSN' ? row.FSN : row.ASIN;
@@ -83,12 +86,70 @@ document.addEventListener('DOMContentLoaded', async function () {
                         const doc = parser.parseFromString(text, 'text/html');
 
                         if (isAmazon) {
-                            const priceElement = doc.querySelector("span.a-offscreen");
-                            price = priceElement ? priceElement.innerText.trim() : "N/A";
+                            // --- AMAZON SCRAPING LOGIC ---
+                            const priceElement = doc.querySelector("span.a-offscreen, span.a-price-whole");
+                            price = priceElement ? (priceElement.textContent || "").trim() : "N/A";
                         } else {
-                            const priceElement = doc.querySelector("div.v1zwn21l.v1zwn20._1psv1zeb9._1psv1ze0");
-                            price = priceElement ? priceElement.innerText.trim() : "N/A";
+                            // --- FLIPKART SCRAPING LOGIC ---
+                            let foundPrice = "N/A";
+                            
+                            // Tier 1: JSON-LD Strategy 
+                            const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+                            for (let script of scripts) {
+                                try {
+                                    const jsonData = JSON.parse(script.textContent || "");
+                                    const items = Array.isArray(jsonData) ? jsonData : [jsonData];
+                                    for (let item of items) {
+                                        if (item['@type'] === 'Product' && item.offers) {
+                                            let offers = Array.isArray(item.offers) ? item.offers : [item.offers];
+                                            if (offers[0] && offers[0].price) {
+                                                foundPrice = String(offers[0].price);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                } catch (e) {}
+                                if (foundPrice !== "N/A") break;
+                            }
+
+                            // Tier 2: DOM Node Search Strategy
+                            if (foundPrice === "N/A") {
+                                const allElements = doc.querySelectorAll('div, span');
+                                for (let el of allElements) {
+                                    const txt = (el.textContent || "").trim();
+                                    // Looks for any text containing our messy symbol or standard ₹
+                                    if (/(?:₹|&#8377;|â‚¹|Rs\.?)\s*[0-9,]+(\.[0-9]+)?/.test(txt)) {
+                                        foundPrice = txt; 
+                                        break; 
+                                    }
+                                }
+                            }
+
+                            // Tier 3: Raw Text Regex Strategy
+                            if (foundPrice === "N/A") {
+                                const rawMatch = text.match(/>\s*(?:₹|&#8377;|â‚¹|Rs\.?)\s*([0-9,]+(\.[0-9]+)?)\s*</);
+                                if (rawMatch && rawMatch[1]) {
+                                    foundPrice = rawMatch[1];
+                                }
+                            }
+
+                            price = foundPrice;
                         }
+
+                        // --- THE MASTER CLEANUP FILTER ---
+                        if (price !== "N/A" && price !== "Blocked/Error") {
+                            // This rips out EVERYTHING except numbers, commas, and decimals
+                            const cleanNumber = price.match(/[0-9,]+(\.[0-9]+)?/);
+                            
+                            if (cleanNumber && cleanNumber[0]) {
+                                // \u20B9 is the universal safe code for ₹
+                                // If you want JUST the numbers (no symbol at all), change this to: price = cleanNumber[0];
+                                price = "\u20B9 " + cleanNumber[0];
+                            } else {
+                                price = "N/A";
+                            }
+                        }
+
                     } catch (err) {
                         price = "Blocked/Error";
                     }
@@ -96,10 +157,12 @@ document.addEventListener('DOMContentLoaded', async function () {
                     updates.push({ rowIndex: row.rowIndex, price: price });
                     status.innerText = `Scraping (${tab}): ${i + 1}/${rows.length} | Price: ${price}`;
 
+                    // Safety throttle delay
                     const delay = Math.floor(Math.random() * 2000) + 1000; 
                     await new Promise(r => setTimeout(r, delay));
                 }
 
+                // 3. Write Back to Google Sheets
                 if (updates.length > 0) {
                     status.innerText = `Writing prices to ${tab}...`;
                     const writeResponse = await fetch(webAppUrl, {
@@ -124,7 +187,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
         }
 
-        // --- NEW: Save and display Last Run Timestamp ---
+        // --- Save and display Last Run Timestamp ---
         const now = new Date().toLocaleString();
         chrome.storage.local.set({ lastRunTime: now });
         lastRunText.innerText = `Last Run: ${now}`;
